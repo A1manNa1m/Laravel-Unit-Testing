@@ -5,7 +5,7 @@ namespace App\Http\Controllers\API\V1;
 use Illuminate\Http\Request;
 use App\Models\Payment;
 use App\Http\Requests\V1\StorePaymentRequest;
-use App\Http\Requests\UpdatePaymentRequest;
+use App\Http\Requests\V1\UpdatePaymentRequest;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\V1\PaymentCollection;
 use App\Http\Resources\V1\PaymentResource;
@@ -106,7 +106,41 @@ class PaymentController extends Controller
      */
     public function update(UpdatePaymentRequest $request, Payment $payment)
     {
-        //
+        $validated = $request->validated();
+
+        // Use the invoice_id from the request OR fallback to existing payment's invoice_id
+        $invoiceId = $validated['invoice_id'] ?? $payment->invoice_id;
+        $invoice = Invoice::findOrFail($invoiceId);
+
+        // Use amount from request OR fallback to current amount
+        $newAmount = $validated['amount'] ?? $payment->amount;
+
+        // Adjust totals
+        $totalPaid = $invoice->payments()->sum('amount') - $payment->amount;
+        $newTotal = $totalPaid + $newAmount;
+
+        // Update invoice status
+        if ($newTotal == $invoice->amount) {
+            $invoice->status = 'FP';
+            $invoice->paid_date = now();
+        } elseif ($newTotal > $invoice->amount) {
+            $invoice->status = 'OP';
+            $invoice->paid_date = now();
+        } elseif ($newTotal > 0) {
+            $invoice->status = 'HP';
+            $invoice->paid_date = null;
+        } else {
+            $invoice->status = 'B';
+            $invoice->paid_date = null;
+        }
+
+        $invoice->save();
+
+        // Finally update the payment
+        $payment->update($validated);
+
+        return response()->json(['message' => 'Payment updated successfully']);
+
     }
 
     /**
