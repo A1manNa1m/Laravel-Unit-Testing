@@ -27,5 +27,6 @@ Route::group(['prefix'=> 'v1', 'namespace'=>'App\Http\Controllers\API\V1','middl
     Route::apiResource('invoices',InvoiceController::class);
     Route::apiResource('payments',PaymentController::class);
 
-    Route::post('invoices/bulk', [InvoiceController::class, 'bulkStore']);
+    Route::post('invoices/bulk', [InvoiceController::class, 'bulkStoreInvoice']);
+    Route::post('payments/bulk', [PaymentController::class, 'bulkStorePayment']);
 });

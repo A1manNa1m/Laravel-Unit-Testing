@@ -67,9 +67,9 @@ class InvoiceController extends Controller
     }
 
     /**
-     * Store a newly created resource in storage.
+     * Store a bulk invoice resource in storage.
      */
-    public function bulkStore(BulkStoreInvoiceRequest $request)
+    public function bulkStoreInvoice(BulkStoreInvoiceRequest $request)
     {
         $bulk = collect($request->all())->map(function ($item) {
             return [
