@@ -27,6 +27,16 @@ class PaymentController extends Controller
         return new PaymentResource($payment);
     }
 
+    public function update(UpdatePaymentRequest $request, Payment $payment, PaymentService $svc)
+    {
+        $this->authorize('update', $payment);
+
+        $updatedPayment = $svc->update($payment->id, $request->validated());
+
+        return response()->json(['message' => 'Payment updated successfully', 'payment' => $updatedPayment]);
+    }
+
+
     /**
      * Store a bulk payment resource in storage.
      */
@@ -67,48 +77,6 @@ class PaymentController extends Controller
 
         // 5. Return all created payments as a resource collection
         return PaymentResource::collection($createdPayments);
-
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(UpdatePaymentRequest $request, Payment $payment)
-    {
-        $validated = $request->validated();
-
-        // Use the invoice_id from the request OR fallback to existing payment's invoice_id
-        $invoiceId = $validated['invoice_id'] ?? $payment->invoice_id;
-        $invoice = Invoice::findOrFail($invoiceId);
-
-        // Use amount from request OR fallback to current amount
-        $newAmount = $validated['amount'] ?? $payment->amount;
-
-        // Adjust totals
-        $totalPaid = $invoice->payments()->sum('amount') - $payment->amount;
-        $newTotal = $totalPaid + $newAmount;
-
-        // Update invoice status
-        if ($newTotal == $invoice->amount) {
-            $invoice->status = 'FP';
-            $invoice->paid_date = now();
-        } elseif ($newTotal > $invoice->amount) {
-            $invoice->status = 'OP';
-            $invoice->paid_date = now();
-        } elseif ($newTotal > 0) {
-            $invoice->status = 'HP';
-            $invoice->paid_date = null;
-        } else {
-            $invoice->status = 'B';
-            $invoice->paid_date = null;
-        }
-
-        $invoice->save();
-
-        // Finally update the payment
-        $payment->update($validated);
-
-        return response()->json(['message' => 'Payment updated successfully']);
 
     }
 

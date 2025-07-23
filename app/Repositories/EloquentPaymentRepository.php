@@ -10,4 +10,15 @@ class EloquentPaymentRepository implements PaymentRepositoryInterface
     {
         return Payment::create($data);
     }
+
+    public function findOrFail(int $id): Payment
+    {
+        return Payment::findOrFail($id);
+    }
+
+    public function update(Payment $payment, array $data): bool
+    {
+        return $payment->update($data);
+    }
+
 }

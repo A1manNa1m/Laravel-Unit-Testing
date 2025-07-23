@@ -40,4 +40,44 @@ class PaymentService
             'amount' => $amount,
         ]);
     }
+    
+    public function update(int $paymentId, array $data): Payment
+    {
+        // 1. Get the existing payment (through repo)
+        $payment = $this->payments->findOrFail($paymentId);
+
+        // 2. Determine the target invoice (might change if invoice_id provided)
+        $invoiceId = $data['invoice_id'] ?? $payment->invoice_id;
+        $invoice   = $this->invoices->findOrFail($invoiceId);
+
+        // 3. Determine new amount (or fallback to old)
+        $newAmount = $data['amount'] ?? $payment->amount;
+
+        // 4. Adjust totals: remove old payment, then add new
+        $totalPaid = $this->invoices->sumPayments($invoiceId) - $payment->amount;
+        $newTotal  = $totalPaid + $newAmount;
+
+        // 5. Update invoice status
+        if ($newTotal == $invoice->amount) {
+            $invoice->status    = 'FP';
+            $invoice->paid_date = now();
+        } elseif ($newTotal > $invoice->amount) {
+            $invoice->status    = 'OP';
+            $invoice->paid_date = now();
+        } elseif ($newTotal > 0) {
+            $invoice->status    = 'HP';
+            $invoice->paid_date = null;
+        } else {
+            $invoice->status    = 'B';
+            $invoice->paid_date = null;
+        }
+
+        $this->invoices->save($invoice);
+
+        // 6. Update the payment itself
+        $this->payments->update($payment, $data);
+
+        return $payment;
+    }
+
 }
