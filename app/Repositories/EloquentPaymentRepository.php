@@ -21,4 +21,8 @@ class EloquentPaymentRepository implements PaymentRepositoryInterface
         return $payment->update($data);
     }
 
+    public function delete(Payment $payment): bool
+    {
+        return $payment->delete();
+    }
 }

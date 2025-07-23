@@ -176,4 +176,84 @@ class PaymentTest extends TestCase
             // 0 (no payments at all)
         ];
     }
+
+    /**
+     * @dataProvider destroyStatusProvider
+     */
+    public function test_destroy_updates_invoice_status_correctly(
+        float $invoiceAmount,
+        float $totalPayments, // total including this payment
+        float $paymentAmount, // the one being deleted
+        string $expectedStatus,
+        bool $shouldSetPaidDate
+    ) {
+        // Invoice::unguard();
+        
+        $invoiceId = 1;
+        $paymentId = 42;
+
+        // Explicitly set the id to avoid null issues
+        $invoice = new Invoice([
+            'id'        => $invoiceId,
+            'amount'    => $invoiceAmount,
+            'status'    => 'HP',
+            'paid_date' => null,
+        ]);
+        
+        $invoice->id = $invoiceId;  // Force assign manually
+
+        $payment = new Payment([
+            'id'         => $paymentId,
+            'invoice_id' => $invoiceId,
+            'amount'     => $paymentAmount,
+        ]);
+
+
+        // Mock InvoiceRepository
+        $invRepo = Mockery::mock(InvoiceRepositoryInterface::class);
+        $invRepo->shouldReceive('findOrFail')->with($invoiceId)->andReturn($invoice);
+        $invRepo->shouldReceive('sumPayments')->with($invoiceId)->andReturn($totalPayments);
+        $invRepo->shouldReceive('save')->with(Mockery::on(function($inv) use ($expectedStatus, $shouldSetPaidDate) {
+            if ($inv->status !== $expectedStatus) return false;
+            if ($shouldSetPaidDate && is_null($inv->paid_date)) return false;
+            if (!$shouldSetPaidDate && !is_null($inv->paid_date)) return false;
+            return true;
+        }))->once();
+
+        // Mock PaymentRepository
+        $payRepo = Mockery::mock(PaymentRepositoryInterface::class);
+        $payRepo->shouldReceive('findOrFail')->with($paymentId)->andReturn($payment);
+        $payRepo->shouldReceive('delete')->with($payment)->once()->andReturn(true);
+
+        // Run the service
+        $svc = new PaymentService($invRepo, $payRepo);
+        $result = $svc->destroy($paymentId);
+
+        $this->assertTrue($result);
+    }
+
+    /**
+     * Test scenarios for invoice status after deleting a payment.
+     * Each entry: [invoiceAmount, totalPayments (before deletion), paymentAmount, expectedStatus, shouldSetPaidDate]
+     */
+    public function destroyStatusProvider(): array
+    {
+        return [
+            // Case 1: Full Paid (FP) after deletion (new total = invoice amount)
+            [100, 120, 20, 'FP', true],  
+            // 120 total - 20 deleted = 100 (fully paid)
+
+            // Case 2: Overpaid (OP) even after deletion
+            [100, 150, 10, 'OP', true],  
+            // 150 total - 10 deleted = 140 (still overpaid)
+
+            // Case 3: Half Paid (HP)
+            [100, 70, 20, 'HP', false],  
+            // 70 total - 20 deleted = 50 (partial)
+
+            // Case 4: Still Billed (B) - no payments left
+            [100, 20, 20, 'B', false],   
+            // 20 total - 20 deleted = 0
+        ];
+    }
 }

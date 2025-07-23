@@ -80,4 +80,36 @@ class PaymentService
         return $payment;
     }
 
+    public function destroy(int $paymentId): bool
+    {
+        // 1. Find the payment to delete
+        $payment = $this->payments->findOrFail($paymentId);
+        $invoice = $this->invoices->findOrFail($payment->invoice_id);
+
+        // 2. Calculate new total after removing this payment
+        $totalPaid = $this->invoices->sumPayments($invoice->id);
+        $newTotal  = $totalPaid - $payment->amount;
+
+        // 3. Update invoice status
+        if ($newTotal == $invoice->amount) {
+            $invoice->status    = 'FP';
+            $invoice->paid_date = now();
+        } elseif ($newTotal > $invoice->amount) {
+            $invoice->status    = 'OP';
+            $invoice->paid_date = now();
+        } elseif ($newTotal > 0) {
+            $invoice->status    = 'HP';
+            $invoice->paid_date = null;
+        } else {
+            $invoice->status    = 'B';
+            $invoice->paid_date = null;
+        }
+
+        $this->invoices->save($invoice);
+
+        // 4. Delete the payment
+        return $this->payments->delete($payment);
+    }
+
+
 }
